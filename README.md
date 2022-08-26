@@ -2,7 +2,7 @@
 Compress files and entire folders to a zip file and upload to Google drive.
 Subsequent uploads will update the same file on Google drive.
 
-![Screenshot](/screenshot.png)
+![Screenshot](/screenshot.png?raw=true)
 
 ### Initial Setup
 `$ pip install PyDrive2`
