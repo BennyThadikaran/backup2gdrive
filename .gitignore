@@ -7,6 +7,7 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+pyvenv.cfg
 .Python
 build/
 develop-eggs/
@@ -14,6 +15,8 @@ dist/
 downloads/
 eggs/
 .eggs/
+bin/
+include/
 lib/
 lib64/
 parts/
