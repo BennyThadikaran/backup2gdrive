@@ -14,12 +14,12 @@ from pydrive2.drive import GoogleDrive
 ignore = ('bin', 'include', 'lib', 'lib64', 'share',
           'pyvenv.cfg', '__pycache__', '.pytest_cache')
 
-yaml_file= '/home/benny/user_scripts/backup/settings.yaml'
-
 ###############################
 ###    END USER SETTINGS    ###
 ###############################
 
+basepath = os.path.dirname(os.path.realpath(__file__))
+yaml_file= f'{basepath}/settings.yaml'
 
 # Escape special regex characters and join the strings with |
 # 'bin|include|pyvenv\.cfg'
@@ -34,11 +34,13 @@ json_file_info = ext_stripped + '.json'
 
 archive_path = ext_stripped + '.zip'
 
+files_to_backup = argv[2]
+
 print('Adding files to zip')
 
 with ZipFile(archive_path, mode='w', compression=ZIP_BZIP2, compresslevel=9) as zip:
 
-    with open('daily-backup-list.txt') as f:
+    with open(files_to_backup) as f:
         while i := os.path.expanduser(f.readline().strip()):
             if not os.path.isdir(i):
                 zip.write(i)
@@ -51,7 +53,7 @@ with ZipFile(archive_path, mode='w', compression=ZIP_BZIP2, compresslevel=9) as 
                     if ignore_re.search(i) is None:
                         zip.write(i)
 
-print('Filed compressed', archive_path)
+print('Files zipped:', archive_path)
 
 if os.path.isfile(json_file_info):
     with open(json_file_info) as f:
@@ -70,12 +72,12 @@ if data:
 else:
     res = drive.CreateFile()
 
-print('Uploading files to Google drive')
+print('Uploading to Google drive')
 res.SetContentFile(archive_path)
 res.Upload()
 
 with open(json_file_info, 'w') as f:
     dump(res, f, indent=3)
 
-print('File backed up to Google drive.\nFile details saves to', json_file_info)
+print('Zip file backed up to Google drive.\nFile details saved to', json_file_info)
 
