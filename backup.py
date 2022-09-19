@@ -18,6 +18,15 @@ ignore = ('bin', 'include', 'lib', 'lib64', 'share',
 ###    END USER SETTINGS    ###
 ###############################
 
+def sizeof_fmt(num):
+    # source: https://web.archive.org/web/20111010015624/http://blogmag.net/blog/read/38/Print_human_readable_file_size
+    for unit in ("bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB"):
+        if abs(num) < 1024.0:
+            return f"{num:3.1f}{unit}"
+        num /= 1024.0
+    return f"{num:.1f}YB"
+
+
 basepath = os.path.dirname(os.path.realpath(__file__))
 yaml_file= f'{basepath}/settings.yaml'
 
@@ -34,7 +43,7 @@ json_file_info = ext_stripped + '.json'
 
 archive_path = ext_stripped + '.zip'
 
-files_to_backup = argv[2]
+files_to_backup = argv[1]
 
 print('Adding files to zip')
 
@@ -70,9 +79,12 @@ drive = GoogleDrive(gauth)
 if data:
     res = drive.CreateFile({'id': data['id']})
 else:
-    res = drive.CreateFile()
+    res = drive.CreateFile({'title': os.path.basename(archive_path)})
 
-print('Uploading to Google drive')
+file_size = sizeof_fmt(os.path.getsize(archive_path))
+
+print(f'File Size: {file_size}. Uploading to Google drive')
+
 res.SetContentFile(archive_path)
 res.Upload()
 
