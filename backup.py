@@ -1,8 +1,10 @@
 import os
 import re
+import pathlib
+from importlib import util as importUtil
 from sys import argv
-from json import load, dump
-from zipfile import ZipFile, ZIP_BZIP2
+import json
+import zipfile
 from pydrive2.auth import GoogleAuth
 from pydrive2.drive import GoogleDrive
 
@@ -11,12 +13,15 @@ from pydrive2.drive import GoogleDrive
 ###############################
 
 # files and folders to ignore/exclude
-ignore = ('bin', 'include', 'lib', 'lib64', 'share',
-          'pyvenv.cfg', '__pycache__', '.pytest_cache')
+ignore_dir = ('bin', 'include', 'lib', 'lib64', 'share', '__pycache__',
+              '.pytest_cache', 'node_modules', '.git')
+
+ignore_files = ('pyvenv.cfg', )
 
 ###############################
 ###    END USER SETTINGS    ###
 ###############################
+
 
 def sizeof_fmt(num):
     # source: https://web.archive.org/web/20111010015624/http://blogmag.net/blog/read/38/Print_human_readable_file_size
@@ -27,69 +32,81 @@ def sizeof_fmt(num):
     return f"{num:.1f}YB"
 
 
-basepath = os.path.dirname(os.path.realpath(__file__))
-yaml_file= f'{basepath}/settings.yaml'
+DIR = pathlib.Path(__file__).parent
+SETTINGS_FILE = DIR / 'settings.yaml'
+BACKUP_FILE_PATH = pathlib.Path(argv[1])
+ARCHIVE_PATH = BACKUP_FILE_PATH.with_suffix('.zip')
+META_DATAFILE = BACKUP_FILE_PATH.with_name('meta.json')
+
+has_lzma = importUtil.find_spec('lzma')
+compressionMethod = zipfile.ZIP_LZMA if has_lzma else zipfile.ZIP_BZIP2
 
 # Escape special regex characters and join the strings with |
 # 'bin|include|pyvenv\.cfg'
-pattern = '|'.join(map(re.escape, ignore))
+pattern = '|'.join(map(re.escape, ignore_dir))
 
 # precompile regex
 ignore_re = re.compile(pattern)
 
-ext_stripped = os.path.splitext(argv[1])[0]
+backup_lst = BACKUP_FILE_PATH.read_text().strip().split('\n')
 
-json_file_info = ext_stripped + '.json'
+meta_key = BACKUP_FILE_PATH.stem
 
-archive_path = ext_stripped + '.zip'
-
-files_to_backup = argv[1]
+if META_DATAFILE.exists():
+    meta = json.loads(META_DATAFILE.read_bytes())
+else:
+    meta = {meta_key: {}}
 
 print('Adding files to zip')
 
-with ZipFile(archive_path, mode='w', compression=ZIP_BZIP2, compresslevel=9) as zip:
+with zipfile.ZipFile(ARCHIVE_PATH,
+                     mode='w',
+                     compression=compressionMethod,
+                     compresslevel=9) as zip:
 
-    with open(files_to_backup) as f:
-        while i := os.path.expanduser(f.readline().strip()):
-            if not os.path.isdir(i):
-                zip.write(i)
+    for file in backup_lst:
+        file = pathlib.Path(file).expanduser()
+
+        if not file.exists():
+            print(f'Path not found: {file}')
+            continue
+
+        if file.is_file():
+            zip.write(file)
+            continue
+
+        for root, _, files in os.walk(file, onerror=print):
+            if ignore_re.search(root):
                 continue
 
-            for root, _, files in os.walk(i):
-                for file in files:
-                    i = os.path.join(root, file)
+            for f in files:
+                if f in ignore_files:
+                    continue
 
-                    if ignore_re.search(i) is None:
-                        zip.write(i)
+                zip.write(pathlib.Path(root).joinpath(f))
 
-print('Files zipped:', archive_path)
+print('Files zipped:', ARCHIVE_PATH)
 
-if os.path.isfile(json_file_info):
-    with open(json_file_info) as f:
-        data = load(f)
-else:
-    data = None
-
-
-gauth = GoogleAuth(settings_file=yaml_file)
+gauth = GoogleAuth(settings_file=str(SETTINGS_FILE))
 gauth.LocalWebserverAuth()
 
 drive = GoogleDrive(gauth)
 
-if data:
-    res = drive.CreateFile({'id': data['id']})
+if 'id' in meta[meta_key]:
+    res = drive.CreateFile({'id': meta[meta_key]['id']})
 else:
-    res = drive.CreateFile({'title': os.path.basename(archive_path)})
+    res = drive.CreateFile({'title': ARCHIVE_PATH.name})
 
-file_size = sizeof_fmt(os.path.getsize(archive_path))
+file_size = sizeof_fmt(ARCHIVE_PATH.stat().st_size)
 
 print(f'File Size: {file_size}. Uploading to Google drive')
 
-res.SetContentFile(archive_path)
+res.SetContentFile(str(ARCHIVE_PATH))
 res.Upload()
 
-with open(json_file_info, 'w') as f:
-    dump(res, f, indent=3)
+meta[meta_key]['id'] = res['id']
+meta[meta_key]['modifiedDate'] = res['modifiedDate']
 
-print('Zip file backed up to Google drive.\nFile details saved to', json_file_info)
+META_DATAFILE.write_text(json.dumps(meta, indent=3))
 
+print(f'Zip file backed to Gdrive.\nFile details saved to {META_DATAFILE}')
