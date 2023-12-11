@@ -82,7 +82,7 @@ ignore_files = ('pyvenv.cfg', )
 
 [PyDrive2](https://pypi.org/project/PyDrive2/)
 
-### Changelog
+### Changelog (11th Dec 2023)
 
 - skip iterating over ignored directories
 - replace os.path with pathlib.Path
